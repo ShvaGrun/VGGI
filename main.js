@@ -93,12 +93,14 @@ function CreateSurfaceData() {
     let c = document.getElementById("c").value;
     let d = document.getElementById("d").value;
     let m = document.getElementById("m").value;
+    let v_end_pi = document.getElementById("v_end_pi").value;
+    let t_end_pi = document.getElementById("t_end_pi").value;
 
     let vertexList = [];
     a = a * m, b = b * m, c = c * m, d = d * m;
 
-    for (let v = 0; v <= 2 * Math.PI; v += 0.1) {
-        for (let t = 0; t <= 2 * Math.PI; t += 0.1) {
+    for (let v = 0; v <= v_end_pi * Math.PI; v += 0.1) {
+        for (let t = 0; t <= t_end_pi * Math.PI; t += 0.1) {
             let f = a * b / Math.sqrt((a * a * Math.sin(v) * Math.sin(v) + b * b * Math.cos(v) * Math.cos(v)));
             let x = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.cos(v);
             let y = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.sin(v);
