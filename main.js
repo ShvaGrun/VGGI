@@ -11,7 +11,6 @@ function deg2rad(angle) {
     return angle * Math.PI / 180;
 }
 
-
 // Constructor
 function Model(name) {
     this.name = name;
