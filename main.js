@@ -86,13 +86,22 @@ function draw() {
     surface.Draw();
 }
 
-function CreateSurfaceData()
-{
+function CreateSurfaceData() {
     let vertexList = [];
 
-    for (let i=0; i<360; i+=5) {
-        vertexList.push( Math.sin(deg2rad(i)), 1, Math.cos(deg2rad(i)) );
-        vertexList.push( Math.sin(deg2rad(i)), 0, Math.cos(deg2rad(i)) );
+    
+    for (let v = 0; v <= 2 * Math.PI; v += 0.1) {
+        for (let t = 0; t <= 2 * Math.PI; t += 0.1) {
+        
+            let a = 1.5, b = 3, c = 2, d = 2;
+
+            let f = a * b / Math.sqrt((a * a * Math.sin(v) * Math.sin(v) + b * b * Math.cos(v) * Math.cos(v)));
+            let x = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.cos(v);
+            let y = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.sin(v);
+            let z = 0.5 * (f - ((d * d - c * c) / f)) * Math.sin(t);
+
+            vertexList.push(x, y, z);
+        }
     }
 
     return vertexList;
