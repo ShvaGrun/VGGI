@@ -5,6 +5,8 @@ let surface;                    // A surface model
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
 
+document.getElementById("draw").addEventListener("click", redraw);
+
 function deg2rad(angle) {
     return angle * Math.PI / 180;
 }
@@ -87,14 +89,17 @@ function draw() {
 }
 
 function CreateSurfaceData() {
-    let vertexList = [];
+    let a = document.getElementById("a").value;
+    let b = document.getElementById("b").value;
+    let c = document.getElementById("c").value;
+    let d = document.getElementById("d").value;
+    let m = document.getElementById("m").value;
 
-    
+    let vertexList = [];
+    a = a * m, b = b * m, c = c * m, d = d * m;
+
     for (let v = 0; v <= 2 * Math.PI; v += 0.1) {
         for (let t = 0; t <= 2 * Math.PI; t += 0.1) {
-        
-            let a = 1.5, b = 3, c = 2, d = 2;
-
             let f = a * b / Math.sqrt((a * a * Math.sin(v) * Math.sin(v) + b * b * Math.cos(v) * Math.cos(v)));
             let x = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.cos(v);
             let y = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.sin(v);
@@ -187,4 +192,9 @@ function init() {
     spaceball = new TrackballRotator(canvas, draw, 0);
 
     draw();
+}
+
+function redraw() {
+    CreateSurfaceData()
+    init()
 }
