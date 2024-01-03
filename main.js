@@ -110,6 +110,18 @@ function CreateSurfaceData() {
         }
     }
 
+    for  (let t = 0; t <= t_end_pi * Math.PI; t += 0.1){
+        for (let v = 0; v <= v_end_pi * Math.PI; v += 0.1) {
+            let f = a * b / Math.sqrt((a * a * Math.sin(v) * Math.sin(v) + b * b * Math.cos(v) * Math.cos(v)));
+            let x = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.cos(v);
+            let y = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.sin(v);
+            let z = 0.5 * (f - ((d * d - c * c) / f)) * Math.sin(t);
+
+            vertexList.push(x, y, z);
+        }
+    }
+
+    
     return vertexList;
 }
 
