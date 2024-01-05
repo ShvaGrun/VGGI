@@ -7,9 +7,6 @@ let spaceball;                  // A SimpleRotator object that lets the user rot
 
 document.getElementById("draw").addEventListener("click", redraw);
 
-function deg2rad(angle) {
-    return angle * Math.PI / 180;
-}
 
 // Constructor
 function Model(name) {
@@ -37,9 +34,9 @@ function Model(name) {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iNormalBuffer);
         gl.vertexAttribPointer(shProgram.iAttribNormal, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(shProgram.iAttribVertex);
-   
-        gl.drawArrays(gl.LINE_STRIP, 0, this.count);
+        gl.enableVertexAttribArray(shProgram.iAttribNormal);
+
+        gl.drawArrays(gl.TRIANGLES, 0, this.count);
     }
 }
 
@@ -69,13 +66,13 @@ function ShaderProgram(name, program) {
  * (Note that the use of the above drawPrimitive function is not an efficient
  * way to draw with WebGL.  Here, the geometry is so simple that it doesn't matter.)
  */
-function draw() { 
+function draw() {
     gl.clearColor(0,0,0,1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    
+
     /* Set the values of the projection transformation */
-    let projection = m4.perspective(Math.PI/8, 1, 8, 12); 
-    
+    let projection = m4.perspective(Math.PI/8, 1, 8, 12);
+
     /* Get the view matrix from the SimpleRotator object.*/
     let modelView = spaceball.getViewMatrix();
 
@@ -84,57 +81,159 @@ function draw() {
 
     let matAccum0 = m4.multiply(rotateToPointZero, modelView );
     let matAccum1 = m4.multiply(translateToPointZero, matAccum0 );
-        
+
     /* Multiply the projection matrix times the modelview matrix to give the
        combined transformation matrix, and send that to the shader program. */
     let modelViewProjection = m4.multiply(projection, matAccum1 );
 
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection );
-    
+
+    const normal = m4.identity();
+    m4.inverse(modelView, normal);
+    m4.transpose(normal, normal);
+
+    gl.uniformMatrix4fv(shProgram.iNormalMatrix, false, normal);
+
     /* Draw the six faces of a cube, with different colors. */
     gl.uniform4fv(shProgram.iColor, [1,1,0,1] );
 
     surface.Draw();
 }
 
-function CreateSurfaceData() {
+function CalculateVertex(v, t) {
     let a = document.getElementById("a").value;
     let b = document.getElementById("b").value;
     let c = document.getElementById("c").value;
     let d = document.getElementById("d").value;
     let m = document.getElementById("m").value;
+
+    a = a * m, b = b * m, c = c * m, d = d * m;
+
+    let f = a * b / Math.sqrt((a * a * Math.sin(v) * Math.sin(v) + b * b * Math.cos(v) * Math.cos(v)));
+    let x = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.cos(v);
+    let y = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.sin(v);
+    let z = 0.5 * (f - ((d * d - c * c) / f)) * Math.sin(t);
+
+    return([x,y,z]);
+}
+
+function calculateNormals(v, t, getVertexFunction) {
+    let psi = 0.0001;
+    let vertex = getVertexFunction(v, t);
+    let vertexU = getVertexFunction(v, t + psi);
+    let vertexV = getVertexFunction(v + psi, t);
+
+    let dU = [
+        (vertex[0] - vertexU[0]) / psi,
+        (vertex[1] - vertexU[1]) / psi,
+        (vertex[2] - vertexU[2]) / psi
+    ];
+
+    let dV = [
+        (vertex[0] - vertexV[0]) / psi,
+        (vertex[1] - vertexV[1]) / psi,
+        (vertex[2] - vertexV[2]) / psi
+    ];
+
+    let normal = m4.normalize(m4.cross(dU, dV));
+
+    return normal;
+}
+
+function CreateSurfaceData() {
     let v_end_pi = document.getElementById("v_end_pi").value;
     let t_end_pi = document.getElementById("t_end_pi").value;
 
     let vertexList = [];
     let normalList = [];
-    
-    a = a * m, b = b * m, c = c * m, d = d * m;
 
     for (let v = 0; v <= v_end_pi * Math.PI; v += 0.1) {
         for (let t = 0; t <= t_end_pi * Math.PI; t += 0.1) {
-            let f = a * b / Math.sqrt((a * a * Math.sin(v) * Math.sin(v) + b * b * Math.cos(v) * Math.cos(v)));
-            let x = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.cos(v);
-            let y = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.sin(v);
-            let z = 0.5 * (f - ((d * d - c * c) / f)) * Math.sin(t);
+            let vertex1 = CalculateVertex(v, t);
+            let vertex2 = CalculateVertex(v, t + 0.1);
+            let vertex3 = CalculateVertex(v + 0.1, t);
+            let vertex4 = CalculateVertex(v + 0.1, t + 0.1);
 
-            vertexList.push(x, y, z);
+            let Normal1 = calculateNormals(v, t, CalculateVertex);
+            let Normal2 = calculateNormals(v, t + 0.1, CalculateVertex);
+            let Normal3 = calculateNormals(v + 0.1, t, CalculateVertex);
+            let Normal4 = calculateNormals(v + 0.1, t + 0.1, CalculateVertex);
+
+            vertexList.push(...vertex1, ...vertex2, ...vertex3, ...vertex3, ...vertex2, ...vertex4);
+            normalList.push(...Normal1, ...Normal2, ...Normal3, ...Normal3, ...Normal2, ...Normal4);
         }
     }
 
     for  (let t = 0; t <= t_end_pi * Math.PI; t += 0.1){
         for (let v = 0; v <= v_end_pi * Math.PI; v += 0.1) {
-            let f = a * b / Math.sqrt((a * a * Math.sin(v) * Math.sin(v) + b * b * Math.cos(v) * Math.cos(v)));
-            let x = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.cos(v);
-            let y = 0.5 * (f * (1 + Math.cos(t)) + (d * d - c * c) * ((1 - Math.cos(t)) / f)) * Math.sin(v);
-            let z = 0.5 * (f - ((d * d - c * c) / f)) * Math.sin(t);
+            let vertex1 = CalculateVertex(v, t);
+            let vertex2 = CalculateVertex(v, t + 0.1);
+            let vertex3 = CalculateVertex(v + 0.1, t);
+            let vertex4 = CalculateVertex(v + 0.1, t + 0.1);
 
-            vertexList.push(x, y, z);
+            let Normal1 = calculateNormals(v, t, CalculateVertex);
+            let Normal2 = calculateNormals(v, t + 0.1, CalculateVertex);
+            let Normal3 = calculateNormals(v + 0.1, t, CalculateVertex);
+            let Normal4 = calculateNormals(v + 0.1, t + 0.1, CalculateVertex);
+
+            vertexList.push(...vertex1, ...vertex2, ...vertex3, ...vertex3, ...vertex2, ...vertex4);
+            normalList.push(...Normal1, ...Normal2, ...Normal3, ...Normal3, ...Normal2, ...Normal4);
         }
     }
 
-    
-    return vertexList;
+    return [vertexList, normalList];
+}
+
+function CalculateVertexSphere(theta, phi, radius) {
+    let x = radius * Math.sin(phi) * Math.cos(theta);
+    let y = radius * Math.sin(phi) * Math.sin(theta);
+    let z = radius * Math.cos(phi);
+
+    return [x, y, z];
+}
+
+function calculateNormalsSphere(theta, phi, radius) {
+    let x = radius * Math.sin(phi) * Math.cos(theta);
+    let y = radius * Math.sin(phi) * Math.sin(theta);
+    let z = radius * Math.cos(phi);
+
+    // Нормалізація вектора нормалі
+    let normal = m4.normalize([x, y, z]);
+
+    return normal;
+}
+
+function CreateSurfaceLight(lightPosition) {
+    let radius = 1.0; // Радіус сфери
+
+    let vertexList = [];
+    let normalList = [];
+
+    for (let phi = 0; phi <= Math.PI; phi += 0.1) {
+        for (let theta = 0; theta <= 2 * Math.PI; theta += 0.1) {
+            let vertex1 = CalculateVertexSphere(theta, phi, radius);
+            let vertex2 = CalculateVertexSphere(theta, phi + 0.1, radius);
+            let vertex3 = CalculateVertexSphere(theta + 0.1, phi, radius);
+            let vertex4 = CalculateVertexSphere(theta + 0.1, phi + 0.1, radius);
+
+            let Normal1 = calculateNormalsSphere(theta, phi, radius);
+            let Normal2 = calculateNormalsSphere(theta, phi + 0.1, radius);
+            let Normal3 = calculateNormalsSphere(theta + 0.1, phi, radius);
+            let Normal4 = calculateNormalsSphere(theta + 0.1, phi + 0.1, radius);
+
+            vertexList.push(...vertex1, ...vertex2, ...vertex3, ...vertex3, ...vertex2, ...vertex4);
+            normalList.push(...Normal1, ...Normal2, ...Normal3, ...Normal3, ...Normal2, ...Normal4);
+        }
+    }
+
+    // Додайте координати точкового світла до vertexList
+    for (let i = 0; i < vertexList.length; i += 3) {
+        vertexList[i] += lightPosition[0];
+        vertexList[i + 1] += lightPosition[1];
+        vertexList[i + 2] += lightPosition[2];
+    }
+
+    return [vertexList, normalList];
 }
 
 
@@ -145,13 +244,13 @@ function initGL() {
     shProgram = new ShaderProgram('Basic', prog);
     shProgram.Use();
 
-    shProgram.iAttribVertex              = gl.getAttribLocation(prog, "vertex");
-    shProgram.iAttribNormal              = gl.getAttribLocation(prog, "normal");
-    shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
-    shProgram.iColor                     = gl.getUniformLocation(prog, "color");
+    shProgram.iAttribVertex              = gl.getAttribLocation(prog, 'vertex');
+    shProgram.iAttribNormal              = gl.getAttribLocation(prog, 'normal');
+    shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog,'ModelViewProjectionMatrix');shProgram.iNormalMatrix              = gl.getUniformLocation(prog,'NormalM');
+    shProgram.iColor                     = gl.getUniformLocation(prog, 'color');
 
     surface = new Model('Surface');
-    surface.BufferData(CreateSurfaceData());
+    surface.BufferData(...CreateSurfaceData());
 
     gl.enable(gl.DEPTH_TEST);
 }
