@@ -6,6 +6,8 @@ let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
 let lightModel;
 
+let lightPosition = [1,1,1];
+
 document.getElementById("draw").addEventListener("click", redraw);
 
 
@@ -57,6 +59,8 @@ function ShaderProgram(name, program) {
     // Location of the uniform matrix representing the combined transformation.
     this.iModelViewProjectionMatrix = -1;
 
+    this.iLightPosition = -1;
+
     this.Use = function() {
         gl.useProgram(this.prog);
     }
@@ -99,7 +103,9 @@ function draw() {
     gl.uniform4fv(shProgram.iColor, [1,1,0,1] );
 
     surface.Draw();
-    lightModel.Draw();
+
+    //gl.uniform3fv(shProgram.iLightPosition, lightPosition);
+    //lightModel.Draw();
 }
 
 function CalculateVertex(v, t) {
@@ -193,23 +199,10 @@ function CalculateVertexSphere(theta, phi, radius) {
 
     return [x, y, z];
 }
-
-function calculateNormalsSphere(theta, phi, radius) {
-    let x = radius * Math.sin(phi) * Math.cos(theta);
-    let y = radius * Math.sin(phi) * Math.sin(theta);
-    let z = radius * Math.cos(phi);
-
-    // Нормалізація вектора нормалі
-    let normal = m4.normalize([x, y, z]);
-
-    return normal;
-}
-
-function CreateSurfaceLight(lightPosition) {
+function CreateSurfaceLight() {
     let radius = 0.05; // Радіус сфери
 
     let vertexList = [];
-    let normalList = [];
 
     for (let phi = 0; phi <= Math.PI; phi += 0.1) {
         for (let theta = 0; theta <= 2 * Math.PI; theta += 0.1) {
@@ -218,24 +211,17 @@ function CreateSurfaceLight(lightPosition) {
             let vertex3 = CalculateVertexSphere(theta + 0.1, phi, radius);
             let vertex4 = CalculateVertexSphere(theta + 0.1, phi + 0.1, radius);
 
-            let Normal1 = calculateNormalsSphere(theta, phi, radius);
-            let Normal2 = calculateNormalsSphere(theta, phi + 0.1, radius);
-            let Normal3 = calculateNormalsSphere(theta + 0.1, phi, radius);
-            let Normal4 = calculateNormalsSphere(theta + 0.1, phi + 0.1, radius);
-
             vertexList.push(...vertex1, ...vertex2, ...vertex3, ...vertex3, ...vertex2, ...vertex4);
-            normalList.push(...Normal1, ...Normal2, ...Normal3, ...Normal3, ...Normal2, ...Normal4);
         }
     }
 
-    // Додайте координати точкового світла до vertexList
     for (let i = 0; i < vertexList.length; i += 3) {
         vertexList[i] += lightPosition[0];
         vertexList[i + 1] += lightPosition[1];
         vertexList[i + 2] += lightPosition[2];
     }
 
-    return [vertexList, normalList];
+    return [vertexList, vertexList];
 }
 
 
@@ -251,13 +237,13 @@ function initGL() {
     shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog,'ModelViewProjectionMatrix');
     shProgram.iNormalMatrix              = gl.getUniformLocation(prog,'NormalM');
     shProgram.iColor                     = gl.getUniformLocation(prog, 'color');
+    shProgram.iLightPosition             = gl.getUniformLocation(prog, "lightPosition")
 
     surface = new Model('Surface');
     surface.BufferData(...CreateSurfaceData());
 
-    lightModel = new Model('SurfaceLight');
-    lightModel.BufferData(...CreateSurfaceLight([1, 1, 1]));
-
+    lightModel = new Model();
+    lightModel.BufferData(...CreateSurfaceLight());
     gl.enable(gl.DEPTH_TEST);
 }
 
@@ -302,7 +288,7 @@ function init() {
     try {
         canvas = document.getElementById("webglcanvas");
         gl = canvas.getContext("webgl");
-        if ( ! gl ) {
+        if (!gl) {
             throw "Browser does not support WebGL";
         }
     }
@@ -312,15 +298,12 @@ function init() {
         return;
     }
     try {
-        initGL();  // initialize the WebGL graphics context
-    }
-    catch (e) {
+        initGL(true);  // initialize the WebGL graphics context
+    } catch (e) {
         document.getElementById("canvas-holder").innerHTML =
             "<p>Sorry, could not initialize the WebGL graphics context: " + e + "</p>";
         return;
     }
-
-    spaceball = new TrackballRotator(canvas, draw, 0);
 
     draw();
 }
