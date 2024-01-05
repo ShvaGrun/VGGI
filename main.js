@@ -4,6 +4,7 @@ let gl;                         // The webgl context.
 let surface;                    // A surface model
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
+let lightModel;
 
 document.getElementById("draw").addEventListener("click", redraw);
 
@@ -98,6 +99,7 @@ function draw() {
     gl.uniform4fv(shProgram.iColor, [1,1,0,1] );
 
     surface.Draw();
+    lightModel.Draw();
 }
 
 function CalculateVertex(v, t) {
@@ -204,7 +206,7 @@ function calculateNormalsSphere(theta, phi, radius) {
 }
 
 function CreateSurfaceLight(lightPosition) {
-    let radius = 1.0; // Радіус сфери
+    let radius = 0.05; // Радіус сфери
 
     let vertexList = [];
     let normalList = [];
@@ -246,11 +248,15 @@ function initGL() {
 
     shProgram.iAttribVertex              = gl.getAttribLocation(prog, 'vertex');
     shProgram.iAttribNormal              = gl.getAttribLocation(prog, 'normal');
-    shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog,'ModelViewProjectionMatrix');shProgram.iNormalMatrix              = gl.getUniformLocation(prog,'NormalM');
+    shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog,'ModelViewProjectionMatrix');
+    shProgram.iNormalMatrix              = gl.getUniformLocation(prog,'NormalM');
     shProgram.iColor                     = gl.getUniformLocation(prog, 'color');
 
     surface = new Model('Surface');
     surface.BufferData(...CreateSurfaceData());
+
+    lightModel = new Model('SurfaceLight');
+    lightModel.BufferData(...CreateSurfaceLight([1, 1, 1]));
 
     gl.enable(gl.DEPTH_TEST);
 }
