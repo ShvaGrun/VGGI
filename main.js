@@ -291,14 +291,14 @@ function init() {
         if (!gl) {
             throw "Browser does not support WebGL";
         }
-    }
-    catch (e) {
+    } catch (e) {
         document.getElementById("canvas-holder").innerHTML =
             "<p>Sorry, could not get a WebGL graphics context.</p>";
         return;
     }
     try {
         initGL(true);  // initialize the WebGL graphics context
+        spaceball = new TrackballRotator(canvas, draw, 0);
     } catch (e) {
         document.getElementById("canvas-holder").innerHTML =
             "<p>Sorry, could not initialize the WebGL graphics context: " + e + "</p>";
@@ -307,6 +307,7 @@ function init() {
 
     draw();
 }
+
 
 function redraw() {
     CreateSurfaceData()
