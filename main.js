@@ -89,7 +89,7 @@ function draw() {
 
     /* Multiply the projection matrix times the modelview matrix to give the
        combined transformation matrix, and send that to the shader program. */
-    let modelViewProjection = m4.multiply(projection, matAccum1 );
+    let modelViewProjection = m4.multiply(projection, matAccum1);
 
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection );
 
@@ -99,14 +99,36 @@ function draw() {
 
     gl.uniformMatrix4fv(shProgram.iNormalMatrix, false, normal);
 
-    /* Draw the six faces of a cube, with different colors. */
+    // Draw the surface with modelView transformation
     gl.uniform4fv(shProgram.iColor, [1,1,0,1] );
-
     surface.Draw();
 
-    //gl.uniform3fv(shProgram.iLightPosition, lightPosition);
-    //lightModel.Draw();
+    // Draw the light sphere without modelView transformation
+    lightModel.Draw();
 }
+
+function movePointOnCircle(radius, speed) {
+    let time = performance.now() * 0.001; // Поточний час
+    let angle = time * speed; // Кут залежить від часу та швидкості руху
+
+    // Обчислення координат для lightPosition
+    let lightPosition = [
+        radius * Math.cos(angle),
+        radius * Math.sin(angle),
+        1.0
+    ];
+
+    surface.Draw();
+    lightModel.BufferData(...CreateSurfaceLight(lightPosition));
+    gl.uniform3fv(shProgram.iLightPosition, lightPosition);
+    lightModel.Draw();
+}
+
+function animate() {
+    movePointOnCircle(1.5, 0.4); // Рух точки по колу з радіусом 2.0 та швидкістю 2.0
+    requestAnimationFrame(animate);
+}
+
 
 function CalculateVertex(v, t) {
     let a = document.getElementById("a").value;
@@ -199,7 +221,7 @@ function CalculateVertexSphere(theta, phi, radius) {
 
     return [x, y, z];
 }
-function CreateSurfaceLight() {
+function CreateSurfaceLight(lightPosition) {
     let radius = 0.05; // Радіус сфери
 
     let vertexList = [];
@@ -243,7 +265,7 @@ function initGL() {
     surface.BufferData(...CreateSurfaceData());
 
     lightModel = new Model();
-    lightModel.BufferData(...CreateSurfaceLight());
+    lightModel.BufferData(...CreateSurfaceLight(lightPosition));
     gl.enable(gl.DEPTH_TEST);
 }
 
@@ -306,6 +328,7 @@ function init() {
     }
 
     draw();
+    animate();
 }
 
 
