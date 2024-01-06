@@ -5,6 +5,7 @@ let surface;                    // A surface model
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
 let lightModel;
+let diameter;
 
 let lightPosition = [1,1,1];
 
@@ -107,7 +108,7 @@ function draw() {
     lightModel.Draw();
 }
 
-function movePointOnCircle(radius, speed) {
+function movePointOnCircle(radius = diameter, speed) {
     let time = performance.now() * 0.001; // Поточний час
     let angle = time * speed; // Кут залежить від часу та швидкості руху
 
@@ -125,7 +126,7 @@ function movePointOnCircle(radius, speed) {
 }
 
 function animate() {
-    movePointOnCircle(1.5, 0.4); // Рух точки по колу з радіусом 2.0 та швидкістю 2.0
+    movePointOnCircle(diameter, 0.4); // Рух точки по колу з радіусом 2.0 та швидкістю 2.0
     requestAnimationFrame(animate);
 }
 
@@ -211,6 +212,7 @@ function CreateSurfaceData() {
         }
     }
 
+    diameter = calculateDiameter(vertexList)
     return [vertexList, normalList];
 }
 
@@ -246,6 +248,25 @@ function CreateSurfaceLight(lightPosition) {
     return [vertexList, vertexList];
 }
 
+function calculateDiameter(vertexList) {
+    let maxDiameter = 0;
+
+    for (let i = 0; i < vertexList.length - 3; i += 3) {
+        for (let j = i + 3; j < vertexList.length; j += 3) {
+            let distance = Math.sqrt(
+                Math.pow(vertexList[i] - vertexList[j], 2) +
+                Math.pow(vertexList[i + 1] - vertexList[j + 1], 2) +
+                Math.pow(vertexList[i + 2] - vertexList[j + 2], 2)
+            );
+
+            if (distance > maxDiameter) {
+                maxDiameter = distance;
+            }
+        }
+    }
+
+    return maxDiameter;
+}
 
 /* Initialize the WebGL context. Called from init() */
 function initGL() {
