@@ -203,7 +203,6 @@ function draw() {
     surface.Draw();
 
     let translate = CalculateVertex(userPoint[0], userPoint[1])
-    console.log(translate)
     gl.uniform3fv(shProgram.ITranslateSphere, translate)
     gl.uniform1f(shProgram.iB, 1);
     sphere.DrawSphere();
@@ -355,7 +354,6 @@ function initGL() {
     LoadTexture()
     surface = new Model('Surface');
     surface.BufferData(...CreateSurfaceData());
-    console.log(CreateSurfaceData())
 
     sphere = new Model('Sphere');
     sphere.BufferData(...CreateSphereSurface())
