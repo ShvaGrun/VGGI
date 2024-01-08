@@ -1,14 +1,16 @@
 'use strict';
 
+
+
 // Vertex shader
 const vertexShaderSource = `
 attribute vec3 vertex;
 attribute vec2 texCoord;
 uniform mat4 ModelViewProjectionMatrix;
-uniform vec3 translateSphere;
 
 varying vec2 texCoordV;
 uniform vec3 userPoint;
+uniform vec3 translateSphere;
 
 uniform float scaleK;
 uniform float b;
@@ -70,7 +72,7 @@ void main() {
 
     gl_Position = ModelViewProjectionMatrix * vec4(vertex,1.0);
     if(b>0.0){
-          vec4 sphere = translation(userPoint)*vec4(vertex,1.0);
+          vec4 sphere = translation(translateSphere)*vec4(vertex,1.0);
           gl_Position=ModelViewProjectionMatrix*sphere;
         }
 }`;
@@ -90,7 +92,7 @@ varying vec2 texCoordV;
 void main() {
     gl_FragColor = texture2D(tmu, texCoordV);
     if(b>0.){
-            gl_FragColor = vec4(0.,0.,0.,1.);
+            gl_FragColor = vec4(1);
         }
 }`;
 
@@ -99,7 +101,7 @@ let surface;                    // A surface model
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
 let sphere;
-let userPoint = [1.0, 1.0];
+let userPoint = [0, 0];
 
 document.getElementById("draw").addEventListener("click", redraw);
 
@@ -134,6 +136,13 @@ function Model(name) {
         gl.enableVertexAttribArray(shProgram.iAttribVertexTexture);
 
         gl.drawArrays(gl.TRIANGLES, 0, this.count);
+    }
+
+    this.DrawSphere = function () {
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
+        gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shProgram.iAttribVertex);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
     }
 }
 
@@ -188,13 +197,16 @@ function draw() {
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection );
 
     /* Draw the six faces of a cube, with different colors. */
-    gl.uniform3fv(shProgram.iUserPoint, [userPoint[0] / (Math.PI * 2), userPoint[1] / (Math.PI * 2), 0]);
-    gl.uniform1f(shProgram.iSclAmpl, 1);
+    gl.uniform1f(shProgram.iScaleK, document.getElementById("scaleK").value);
 
-    gl.uniform3fv(shProgram.iTranslateSphere, [-0., -0., -0.])
     gl.uniform1f(shProgram.iB, -1);
-
     surface.Draw();
+
+    let translate = CalculateVertex(userPoint[0], userPoint[1])
+    console.log(translate)
+    gl.uniform3fv(shProgram.ITranslateSphere, translate)
+    gl.uniform1f(shProgram.iB, 1);
+    sphere.DrawSphere();
 }
 
 function CalculateVertex(v, t) {
@@ -321,7 +333,6 @@ function CreateSphereSurface() {
             vertexList.push(...vertex1, ...vertex2, ...vertex3, ...vertex3, ...vertex2, ...vertex4);
         }
     }
-
     return [vertexList, vertexList];
 }
 
@@ -336,17 +347,18 @@ function initGL() {
     shProgram.iAttribVertex              = gl.getAttribLocation(prog, 'vertex');
     shProgram.iAttribVertexTexture       = gl.getAttribLocation(prog, 'texCoord');
     shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog,'ModelViewProjectionMatrix');
-    shProgram.iUserPoint              = gl.getUniformLocation(prog, 'userPoint');
-    shProgram.iTranslateSphere           = gl.getUniformLocation(prog, 'translateSphere');
+    shProgram.iUserPoint                 = gl.getUniformLocation(prog, 'userPoint');
     shProgram.iB                         = gl.getUniformLocation(prog, 'b');
-    shProgram.iSclAmpl                   = gl.getUniformLocation(prog, 'scaleK');
+    shProgram.iScaleK                   = gl.getUniformLocation(prog, 'scaleK');
+    shProgram.ITranslateSphere           = gl.getUniformLocation(prog, 'translateSphere');
 
     LoadTexture()
     surface = new Model('Surface');
     surface.BufferData(...CreateSurfaceData());
+    console.log(CreateSurfaceData())
 
-    //sphere = new Model('Sphere');
-    //sphere.BufferData(CreateSphereSurface())
+    sphere = new Model('Sphere');
+    sphere.BufferData(...CreateSphereSurface())
 
     gl.enable(gl.DEPTH_TEST);
 }
@@ -410,12 +422,22 @@ function init() {
     }
 
     draw();
+    animate();
 }
 
+function animate() {
+    draw()
+    window.requestAnimationFrame(animate)
+}
 
 function redraw() {
     CreateSurfaceData()
     init()
+}
+
+function redrawSphere() {
+    CreateSphereSurface()
+    draw()
 }
 
 window.onkeydown = (e) => {
@@ -431,6 +453,7 @@ window.onkeydown = (e) => {
     else if (e.keyCode == 65) {
         userPoint[1] = Math.max(userPoint[1] - 0.1, 0);
     }
+    redrawSphere()
 }
 
 function LoadTexture() {
