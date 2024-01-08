@@ -1,30 +1,124 @@
 'use strict';
 
+// Vertex shader
+const vertexShaderSource = `
+attribute vec3 vertex;
+attribute vec2 texCoord;
+uniform mat4 ModelViewProjectionMatrix;
+uniform vec3 translateSphere;
+
+varying vec2 texCoordV;
+uniform vec3 userPoint;
+
+uniform float scaleK;
+uniform float b;
+
+mat4 translation(vec3 t) {
+    mat4 dst;
+
+    dst[0][0] = 1.0;
+    dst[0][ 1] = 0.0;
+    dst[0][ 2] = 0.0;
+    dst[0][ 3] = 0.0;
+    dst[1][ 0] = 0.0;
+    dst[1][ 1] = 1.0;
+    dst[1][ 2] = 0.0;
+    dst[1][ 3] = 0.0;
+    dst[2][ 0] = 0.0;
+    dst[2][ 1] = 0.0;
+    dst[2][ 2] = 1.0;
+    dst[2][ 3] = 0.0;
+    dst[3][ 0] = t.x;
+    dst[3][ 1] = t.y;
+    dst[3][ 2] = t.z;
+    dst[3][ 3] = 1.0;
+
+    return dst;
+}
+
+mat4 scaling(float s){
+    mat4 dst;
+
+    dst[0][0] = s;
+    dst[0][ 1] = 0.0;
+    dst[0][ 2] = 0.0;
+    dst[0][ 3] = 0.0;
+    dst[1][ 0] = 0.0;
+    dst[1][ 1] = s;
+    dst[1][ 2] = 0.0;
+    dst[1][ 3] = 0.0;
+    dst[2][ 0] = 0.0;
+    dst[2][ 1] = 0.0;
+    dst[2][ 2] = s;
+    dst[2][ 3] = 0.0;
+    dst[3][ 0] = 0.0;
+    dst[3][ 1] = 0.0;
+    dst[3][ 2] = 0.0;
+    dst[3][ 3] = 1.0;
+
+    return dst;
+}
+
+void main() {
+    vec4 tex1 = vec4(texCoord,0.,1.) * translation(userPoint);
+    vec4 tex2 = tex1 * scaling(scaleK);
+    vec4 tex3 = tex2 * translation(-userPoint);
+
+    texCoordV=tex3.xy;
+    vec4 vertPos4 = ModelViewProjectionMatrix * vec4(vertex, 1.0);
+    vec3 vertPos = vec3(vertPos4) / vertPos4.w;
+
+    gl_Position = ModelViewProjectionMatrix * vec4(vertex,1.0);
+    if(b>0.0){
+          vec4 sphere = translation(userPoint)*vec4(vertex,1.0);
+          gl_Position=ModelViewProjectionMatrix*sphere;
+        }
+}`;
+
+
+// Fragment shader
+const fragmentShaderSource = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+   precision highp float;
+#else
+   precision mediump float;
+#endif
+
+uniform sampler2D tmu;
+uniform float b;
+varying vec2 texCoordV;
+void main() {
+    gl_FragColor = texture2D(tmu, texCoordV);
+    if(b>0.){
+            gl_FragColor = vec4(0.,0.,0.,1.);
+        }
+}`;
+
 let gl;                         // The webgl context.
 let surface;                    // A surface model
 let shProgram;                  // A shader program
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
-let lightModel;
-
-let lightPosition = [1,1,1];
+let sphere;
+let userPoint = [1.0, 1.0];
 
 document.getElementById("draw").addEventListener("click", redraw);
+
 
 
 // Constructor
 function Model(name) {
     this.name = name;
     this.iVertexBuffer = gl.createBuffer();
-    this.iNormalBuffer = gl.createBuffer();
+    this.iVertexTextureBuffer = gl.createBuffer();
     this.count = 0;
 
-    this.BufferData = function(vertices, normal) {
+    this.BufferData = function(vertices, verticesTexture) {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STREAM_DRAW);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.iNormalBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normal), gl.STREAM_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexTextureBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verticesTexture), gl.STREAM_DRAW);
 
         this.count = vertices.length/3;
     }
@@ -35,9 +129,9 @@ function Model(name) {
         gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(shProgram.iAttribVertex);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.iNormalBuffer);
-        gl.vertexAttribPointer(shProgram.iAttribNormal, 3, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(shProgram.iAttribNormal);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexTextureBuffer);
+        gl.vertexAttribPointer(shProgram.iAttribVertexTexture, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shProgram.iAttribVertexTexture);
 
         gl.drawArrays(gl.TRIANGLES, 0, this.count);
     }
@@ -55,11 +149,11 @@ function ShaderProgram(name, program) {
     // Location of the attribute variable in the shader program.
     this.iAttribNormal = -1;
     // Location of the uniform specifying a color for the primitive.
+    this.iAttribVertexTexture = -1;
+    this.iUserPoint = -1;
     this.iColor = -1;
     // Location of the uniform matrix representing the combined transformation.
     this.iModelViewProjectionMatrix = -1;
-
-    this.iLightPosition = -1;
 
     this.Use = function() {
         gl.useProgram(this.prog);
@@ -93,19 +187,14 @@ function draw() {
 
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection );
 
-    const normal = m4.identity();
-    m4.inverse(modelView, normal);
-    m4.transpose(normal, normal);
-
-    gl.uniformMatrix4fv(shProgram.iNormalMatrix, false, normal);
-
     /* Draw the six faces of a cube, with different colors. */
-    gl.uniform4fv(shProgram.iColor, [1,1,0,1] );
+    gl.uniform3fv(shProgram.iUserPoint, [userPoint[0] / (Math.PI * 2), userPoint[1] / (Math.PI * 2), 0]);
+    gl.uniform1f(shProgram.iSclAmpl, 1);
+
+    gl.uniform3fv(shProgram.iTranslateSphere, [-0., -0., -0.])
+    gl.uniform1f(shProgram.iB, -1);
 
     surface.Draw();
-
-    //gl.uniform3fv(shProgram.iLightPosition, lightPosition);
-    //lightModel.Draw();
 }
 
 function CalculateVertex(v, t) {
@@ -125,50 +214,52 @@ function CalculateVertex(v, t) {
     return([x,y,z]);
 }
 
-function calculateNormals(v, t, getVertexFunction) {
-    let psi = 0.0001;
-    let vertex = getVertexFunction(v, t);
-    let vertexU = getVertexFunction(v, t + psi);
-    let vertexV = getVertexFunction(v + psi, t);
-
-    let dU = [
-        (vertex[0] - vertexU[0]) / psi,
-        (vertex[1] - vertexU[1]) / psi,
-        (vertex[2] - vertexU[2]) / psi
-    ];
-
-    let dV = [
-        (vertex[0] - vertexV[0]) / psi,
-        (vertex[1] - vertexV[1]) / psi,
-        (vertex[2] - vertexV[2]) / psi
-    ];
-
-    let normal = m4.normalize(m4.cross(dU, dV));
-
-    return normal;
+function map(val, f1, t1, f2, t2) {
+    let m;
+    m = (val - f1) * (t2 - f2) / (t1 - f1) + f2
+    return Math.min(Math.max(m, f2), t2);
 }
 
 function CreateSurfaceData() {
     let v_end_pi = document.getElementById("v_end_pi").value;
     let t_end_pi = document.getElementById("t_end_pi").value;
+    let INC = 0.1;
 
     let vertexList = [];
     let normalList = [];
+    let vertexTextureList = [];
 
     for (let v = 0; v <= v_end_pi * Math.PI; v += 0.1) {
         for (let t = 0; t <= t_end_pi * Math.PI; t += 0.1) {
+
             let vertex1 = CalculateVertex(v, t);
             let vertex2 = CalculateVertex(v, t + 0.1);
             let vertex3 = CalculateVertex(v + 0.1, t);
             let vertex4 = CalculateVertex(v + 0.1, t + 0.1);
 
-            let Normal1 = calculateNormals(v, t, CalculateVertex);
-            let Normal2 = calculateNormals(v, t + 0.1, CalculateVertex);
-            let Normal3 = calculateNormals(v + 0.1, t, CalculateVertex);
-            let Normal4 = calculateNormals(v + 0.1, t + 0.1, CalculateVertex);
+            let u1 = map(v, 0, v_end_pi * Math.PI, 0, 1)
+            let v1 = map(t, 0, t_end_pi * Math.PI, 0, 1)
+            vertexTextureList.push(u1, v1)
+
+            u1 = map(t + INC, 0, v_end_pi * Math.PI, 0, 1)
+            vertexTextureList.push(u1, v1)
+
+            u1 = map(t, 0, v_end_pi * Math.PI, 0, 1)
+            v1 = map(v + INC, 0, t_end_pi * Math.PI, 0, 1)
+            vertexTextureList.push(u1, v1)
+
+            u1 = map(t + INC, 0, v_end_pi * Math.PI, 0, 1)
+            v1 = map(v, 0, t_end_pi * Math.PI, 0, 1)
+            vertexTextureList.push(u1, v1)
+
+            v1 = map(v + INC, 0, t_end_pi * Math.PI, 0, 1)
+            vertexTextureList.push(u1, v1)
+
+            u1 = map(t, 0, v_end_pi * Math.PI, 0, 1)
+            v1 = map(v + INC, 0, t_end_pi * Math.PI, 0, 1)
+            vertexTextureList.push(u1, v1)
 
             vertexList.push(...vertex1, ...vertex2, ...vertex3, ...vertex3, ...vertex2, ...vertex4);
-            normalList.push(...Normal1, ...Normal2, ...Normal3, ...Normal3, ...Normal2, ...Normal4);
         }
     }
 
@@ -179,17 +270,33 @@ function CreateSurfaceData() {
             let vertex3 = CalculateVertex(v + 0.1, t);
             let vertex4 = CalculateVertex(v + 0.1, t + 0.1);
 
-            let Normal1 = calculateNormals(v, t, CalculateVertex);
-            let Normal2 = calculateNormals(v, t + 0.1, CalculateVertex);
-            let Normal3 = calculateNormals(v + 0.1, t, CalculateVertex);
-            let Normal4 = calculateNormals(v + 0.1, t + 0.1, CalculateVertex);
+            let u1 = map(t, 0, t_end_pi * Math.PI, 0, 1)
+            let v1 = map(v, 0, v_end_pi * Math.PI, 0, 1)
+            vertexTextureList.push(u1, v1)
+
+            u1 = map(t + INC, 0, t_end_pi * Math.PI, 0, 1)
+            vertexTextureList.push(u1, v1)
+
+            u1 = map(t, 0, t_end_pi * Math.PI, 0, 1)
+            v1 = map(v + INC, 0, v_end_pi * Math.PI, 0, 1)
+            vertexTextureList.push(u1, v1)
+
+            u1 = map(t + INC, 0, t_end_pi * Math.PI, 0, 1)
+            v1 = map(v, 0, v_end_pi * Math.PI, 0, 1)
+            vertexTextureList.push(u1, v1)
+
+            v1 = map(v + INC, 0, 150, 0, 1)
+            vertexTextureList.push(u1, v1)
+
+            u1 = map(t, 0, t_end_pi * Math.PI, 0, 1)
+            v1 = map(v + INC, 0, v_end_pi * Math.PI, 0, 1)
+            vertexTextureList.push(u1, v1)
 
             vertexList.push(...vertex1, ...vertex2, ...vertex3, ...vertex3, ...vertex2, ...vertex4);
-            normalList.push(...Normal1, ...Normal2, ...Normal3, ...Normal3, ...Normal2, ...Normal4);
         }
     }
 
-    return [vertexList, normalList];
+    return [vertexList, vertexTextureList];
 }
 
 function CalculateVertexSphere(theta, phi, radius) {
@@ -199,7 +306,7 @@ function CalculateVertexSphere(theta, phi, radius) {
 
     return [x, y, z];
 }
-function CreateSurfaceLight() {
+function CreateSphereSurface() {
     let radius = 0.05; // Радіус сфери
 
     let vertexList = [];
@@ -215,12 +322,6 @@ function CreateSurfaceLight() {
         }
     }
 
-    for (let i = 0; i < vertexList.length; i += 3) {
-        vertexList[i] += lightPosition[0];
-        vertexList[i + 1] += lightPosition[1];
-        vertexList[i + 2] += lightPosition[2];
-    }
-
     return [vertexList, vertexList];
 }
 
@@ -233,17 +334,20 @@ function initGL() {
     shProgram.Use();
 
     shProgram.iAttribVertex              = gl.getAttribLocation(prog, 'vertex');
-    shProgram.iAttribNormal              = gl.getAttribLocation(prog, 'normal');
+    shProgram.iAttribVertexTexture       = gl.getAttribLocation(prog, 'texCoord');
     shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog,'ModelViewProjectionMatrix');
-    shProgram.iNormalMatrix              = gl.getUniformLocation(prog,'NormalM');
-    shProgram.iColor                     = gl.getUniformLocation(prog, 'color');
-    shProgram.iLightPosition             = gl.getUniformLocation(prog, "lightPosition")
+    shProgram.iUserPoint              = gl.getUniformLocation(prog, 'userPoint');
+    shProgram.iTranslateSphere           = gl.getUniformLocation(prog, 'translateSphere');
+    shProgram.iB                         = gl.getUniformLocation(prog, 'b');
+    shProgram.iSclAmpl                   = gl.getUniformLocation(prog, 'scaleK');
 
+    LoadTexture()
     surface = new Model('Surface');
     surface.BufferData(...CreateSurfaceData());
 
-    lightModel = new Model();
-    lightModel.BufferData(...CreateSurfaceLight());
+    //sphere = new Model('Sphere');
+    //sphere.BufferData(CreateSphereSurface())
+
     gl.enable(gl.DEPTH_TEST);
 }
 
@@ -262,19 +366,19 @@ function createProgram(gl, vShader, fShader) {
     gl.compileShader(vsh);
     if ( ! gl.getShaderParameter(vsh, gl.COMPILE_STATUS) ) {
         throw new Error("Error in vertex shader:  " + gl.getShaderInfoLog(vsh));
-     }
+    }
     let fsh = gl.createShader( gl.FRAGMENT_SHADER );
     gl.shaderSource(fsh, fShader);
     gl.compileShader(fsh);
     if ( ! gl.getShaderParameter(fsh, gl.COMPILE_STATUS) ) {
-       throw new Error("Error in fragment shader:  " + gl.getShaderInfoLog(fsh));
+        throw new Error("Error in fragment shader:  " + gl.getShaderInfoLog(fsh));
     }
     let prog = gl.createProgram();
     gl.attachShader(prog,vsh);
     gl.attachShader(prog, fsh);
     gl.linkProgram(prog);
     if ( ! gl.getProgramParameter( prog, gl.LINK_STATUS) ) {
-       throw new Error("Link error in program:  " + gl.getProgramInfoLog(prog));
+        throw new Error("Link error in program:  " + gl.getProgramInfoLog(prog));
     }
     return prog;
 }
@@ -312,4 +416,43 @@ function init() {
 function redraw() {
     CreateSurfaceData()
     init()
+}
+
+window.onkeydown = (e) => {
+    if (e.keyCode == 87) {
+        userPoint[0] = Math.min(userPoint[0] + 0.1, Math.PI * 2);
+    }
+    else if (e.keyCode == 83) {
+        userPoint[0] = Math.max(userPoint[0] - 0.1, 0);
+    }
+    else if (e.keyCode == 68) {
+        userPoint[1] = Math.min(userPoint[1] + 0.1, 2 * Math.PI);
+    }
+    else if (e.keyCode == 65) {
+        userPoint[1] = Math.max(userPoint[1] - 0.1, 0);
+    }
+}
+
+function LoadTexture() {
+    let texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    const image = new Image();
+    image.crossOrigin = 'anonymus';
+
+    image.src = "texture.jpg";
+    image.onload = () => {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            image
+        );
+        draw()
+    }
 }
